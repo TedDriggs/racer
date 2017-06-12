@@ -72,22 +72,33 @@ pub struct Coordinate {
     /// Line number, 1 based
     pub line: usize,
 
-    /// Column number - 1 based
+    /// Column number, 1 based
     pub column: usize,
 }
 
 /// Context, source, and etc. for detected completion or definition
 #[derive(Clone)]
 pub struct Match {
+    /// The name of the matched item; this could be a type name,
+    /// local variable name, method on a type, etc.
     pub matchstr: String,
+    
+    /// The path to the file where the match occurs.
     pub filepath: path::PathBuf,
+
+    /// The byte offset in the file at `self.filepath` where the match occurs.
     pub point: usize,
+
+    /// The line and column numbers in the file at `self.filepath` where the match occurs.
     pub coords: Option<Coordinate>,
     pub local: bool,
     pub mtype: MatchType,
     pub contextstr: String,
+    /// The names of generic arguments in the matched type or function, such as `"T"`, `"E"` for
+    /// `Result<T,E>`.
     pub generic_args: Vec<String>,
     pub generic_types: Vec<PathSearch>,  // generic types are evaluated lazily
+    /// The rustdoc string for the item.
     pub docs: String,
 }
 
@@ -164,15 +175,31 @@ impl fmt::Debug for Scope {
     }
 }
 
-// Represents a type. Equivilent to rustc's ast::Ty but can be passed across threads
+/// Represents a type. 
+///
+/// Equivalent to rustc's `ast::Ty` but can be passed across threads.
 #[derive(Debug,Clone)]
 pub enum Ty {
+    /// An exact match to a concrete type.
     Match(Match),
-    PathSearch(Path, Scope),   // A path + the scope to be able to resolve it
+    
+    /// A path and the scope to be able to resolve it.
+    PathSearch(Path, Scope),
+
+    /// A heterogenenous, fixed-length tuple of types, such as `(String, u16)`.
     Tuple(Vec<Ty>),
-    FixedLengthVec(Box<Ty>, String), // ty, length expr as string
+    
+    /// A vector of a type (the 0th field) and fixed length (the 1st field, expressed as a string).
+    FixedLengthVec(Box<Ty>, String),
+
+    /// A reference to a type; e.g. `&Foo`.
     RefPtr(Box<Ty>),
+
+    /// A vector of a known type.
     Vec(Box<Ty>),
+
+    /// A type that racer cannot provide completions for. This is currently used for
+    /// literals which are lang items.
     Unsupported
 }
 
@@ -220,9 +247,12 @@ impl fmt::Display for Ty {
     }
 }
 
-// The racer implementation of an ast::Path. Difference is that it is Send-able
+/// Represents a path to a type or value.
+/// 
+/// Equivalent to rustc's `ast::Path` except that it implements `Send`.
 #[derive(Clone)]
 pub struct Path {
+    /// True if the path starts with `::`.
     pub global: bool,
     pub segments: Vec<PathSegment>
 }
@@ -232,6 +262,7 @@ impl Path {
         self.segments[self.segments.len()-1].types.iter()
     }
 
+    /// Creates a new path from a set of string references.
     pub fn from_vec(global: bool, v: Vec<&str>) -> Path {
         let segs = v
             .into_iter()
@@ -240,6 +271,7 @@ impl Path {
         Path{ global: global, segments: segs }
     }
 
+    /// Creates a new path from a `Vec` of owned strings.
     pub fn from_svec(global: bool, v: Vec<String>) -> Path {
         let segs = v
             .into_iter()
@@ -308,9 +340,11 @@ impl fmt::Display for Path {
     }
 }
 
+/// A piece in a path. This can be of the format `foo` or `Box<T>`.
 #[derive(Debug,Clone)]
 pub struct PathSegment {
     pub name: String,
+    /// The generic types in the path segment.
     pub types: Vec<Path>
 }
 
@@ -346,10 +380,16 @@ pub struct IndexedSource {
     pub lines: RefCell<Vec<(usize, usize)>>
 }
 
+/// A view into a range of indexed source code.
 #[derive(Clone,Copy)]
 pub struct Src<'c> {
+    /// The backing source index.
     pub src: &'c IndexedSource,
+
+    /// The beginning of the included range.
     pub from: usize,
+
+    /// The end of the included range.
     pub to: usize
 }
 
@@ -375,6 +415,7 @@ impl IndexedSource {
         self.from(0)
     }
 
+    /// Creates a view into the source starting at the given point.
     pub fn from(&self, from: usize) -> Src {
         Src {
             src: self,
@@ -395,6 +436,8 @@ impl IndexedSource {
         }
     }
 
+    /// Converts line and character coordinates to a point in the indexed source.
+    /// Returns `None` if the coordinates aren't found in the original input.
     pub fn coords_to_point(&self, coords: &Coordinate) -> Option<usize> {
         self.cache_lineoffsets();
         self.lines
@@ -409,6 +452,8 @@ impl IndexedSource {
             })
     }
 
+    /// Converts a byte offset in the source to line and character coordinates.
+    /// Returns `None` if the point is past the end of the original input.
     pub fn point_to_coords(&self, point: usize) -> Option<Coordinate> {
         self.cache_lineoffsets();
         for (n, &(i, l)) in self.lines.borrow().iter().enumerate() {
@@ -485,6 +530,8 @@ impl<'c> Src<'c> {
         StmtIndicesIter::from_parts(self, self.chunk_indices())
     }
 
+    /// Creates a new view into the input source, starting at `from`. This is relative to
+    /// the start of the current view, not of the underlying source.
     pub fn from(&self, from: usize) -> Src<'c> {
         Src {
             src: self.src,
@@ -493,6 +540,7 @@ impl<'c> Src<'c> {
         }
     }
 
+    /// Creates a new view into the input source, extending `to` bytes from `self.from`.
     pub fn to(&self, to: usize) -> Src<'c> {
         Src {
             src: self.src,
@@ -501,6 +549,11 @@ impl<'c> Src<'c> {
         }
     }
 
+    /// Creates a new view into the input source, starting `from` bytes after `self.from`
+    /// and ending `to` bytes from `self.from`.
+    ///
+    /// # Usage
+    /// This function requires that `from <= to`, or else an error will occur.
     pub fn from_to(&self, from: usize, to: usize) -> Src<'c> {
         Src {
             src: self.src,

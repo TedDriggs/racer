@@ -58,6 +58,7 @@ pub fn scope_start(src: Src, point: usize) -> usize {
     }
 }
 
+/// Finds the start of the statement which surrounds `point` in the given source.
 pub fn find_stmt_start(msrc: Src, point: usize) -> Option<usize> {
     // iterate the scope to find the start of the statement
     let scopestart = scope_start(msrc, point);
@@ -101,6 +102,7 @@ pub fn find_let_start(msrc: Src, point: usize) -> Option<usize> {
     let_start.map(|(start, _)| scopestart + start)
 }
 
+/// Gets the module path to the specified point within the provided source code.
 pub fn get_local_module_path(msrc: Src, point: usize) -> Vec<String> {
     let mut v = Vec::new();
     get_local_module_path_(msrc, point, &mut v);
@@ -124,6 +126,7 @@ fn get_local_module_path_(msrc: Src, point: usize, out: &mut Vec<String>) {
     }
 }
 
+/// Locates a module file's explicit path set using the `#[path...]` attribute, if provided.
 pub fn get_module_file_from_path(msrc: Src, point: usize, parentdir: &Path) -> Option<PathBuf> {
     let mut iter = msrc.iter_stmts();
     while let Some((start, end)) = iter.next() {
