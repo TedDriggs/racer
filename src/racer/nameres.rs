@@ -1,8 +1,9 @@
 // Name resolution
+#![cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
 
 use {core, ast, matchers, scopes, typeinf};
 use core::SearchType::{self, ExactMatch, StartsWith};
-use core::{Match, Src, Session, Coordinate, SessionExt, Ty, Point};
+use core::{Match, Src, Session, Coordinate, SessionExt, Ty, Point, SourceByteRange};
 use core::MatchType::{Module, Function, Struct, Enum, FnArg, Trait, StructField, Impl, TraitImpl, MatchArm, Builtin};
 use core::Namespace;
 
@@ -29,7 +30,7 @@ fn search_struct_fields(searchstr: &str, structmatch: &Match,
 
     let mut out = Vec::new();
 
-    for (field, field_point, ty) in fields.into_iter() {
+    for (field, field_point, ty) in fields {
         if symbol_matches(search_type, searchstr, &field) {
             let contextstr = if let Some(t) = ty {
                 t.to_string()
@@ -247,7 +248,7 @@ pub fn search_for_impls(pos: Point, searchstr: &str, filepath: &Path, local: boo
 
         if blob.starts_with("impl") {
             blob.find('{').map(|n| {
-                let ref decl = blob[..n+1];
+                let decl = &blob[..n+1];
                 if decl.contains('!') {
                     // Guard against macros
                     debug!("impl was probably a macro: {} {}", filepath.display(), start);
@@ -330,7 +331,7 @@ pub fn search_for_generic_impls(pos: Point, searchstr: &str, contextm: &Match, f
 
         if blob.starts_with("impl") {
             blob.find('{').map(|n| {
-                let ref decl = blob[..n+1];
+                let decl = &blob[..n+1];
                 if decl.contains('!') {
                     // Guard against macros
                     debug!("impl was probably a macro: {} {}", filepath.display(), start);
@@ -502,7 +503,7 @@ fn preblock_is_fn(preblock: &str) -> bool {
         return true;
     }
 
-    /// Remove visibility declarations, such as restricted visibility
+    // Remove visibility declarations, such as restricted visibility
     let trimmed = if preblock.starts_with("pub") {
         util::trim_visibility(preblock)
     } else {
@@ -583,12 +584,12 @@ pub fn do_file_search(
     debug!("do_file_search {}", searchstr);
     let mut out = Vec::new();
 
-    let srcpaths = std::env::var("RUST_SRC_PATH").unwrap_or("".into());
+    let srcpaths = std::env::var("RUST_SRC_PATH").unwrap_or_else(|_| "".into());
     debug!("do_file_search srcpaths {}", srcpaths);
     let mut v = srcpaths.split(PATH_SEP).collect::<Vec<_>>();
     v.push(currentdir.to_str().unwrap());
     debug!("do_file_search v is {:?}", v);
-    for srcpath in v.into_iter() {
+    for srcpath in v {
         if let Ok(iter) = std::fs::read_dir(Path::new(srcpath)) {
             for fpath_buf in iter.filter_map(|res| res.ok().map(|entry| entry.path())) {
                 // skip filenames that can't be decoded
@@ -732,7 +733,7 @@ pub fn get_crate_file(name: &str, from_path: &Path, session: &Session) -> Option
 
     let srcpaths = std::env::var("RUST_SRC_PATH").expect("RUST_SRC_PATH is set");
     let v = srcpaths.split(PATH_SEP).collect::<Vec<_>>();
-    for srcpath in v.into_iter() {
+    for srcpath in v {
         {
             // try lib<name>/lib.rs, like in the rust source dir
             let cratelibname = format!("lib{}", name);
@@ -770,23 +771,9 @@ pub fn get_module_file(name: &str, parentdir: &Path, session: &Session) -> Optio
     None
 }
 
-pub fn search_scope(start: Point, point: Point, src: Src,
-                    pathseg: &core::PathSegment,
-                    filepath:&Path, search_type: SearchType, local: bool,
-                    namespace: Namespace,
-                    session: &Session,
-                    pending_imports: &PendingImports) -> vec::IntoIter<Match> {
-    let searchstr = &pathseg.name;
-    let mut out = Vec::new();
-
-    debug!("searching scope {:?} start: {} point: {} '{}' {:?} {:?} local: {}, session: {:?}",
-           namespace, start, point, searchstr, filepath.display(), search_type, local, session);
-
-    let scopesrc = src.from(start);
+fn non_test_statements(src: &Src, point: Point) -> Vec<SourceByteRange> {
     let mut skip_next_block = false;
-    let mut delayed_single_imports = Vec::new();
-    let mut delayed_glob_imports = Vec::new();
-    let mut codeit = scopesrc.iter_stmts();
+    let mut codeit = src.iter_stmts();
     let mut v = Vec::new();
 
     // collect up to point so we can search backwards for let bindings
@@ -798,7 +785,7 @@ pub fn search_scope(start: Point, point: Point, src: Src,
             continue;
         }
 
-        let blob = &scopesrc[blobstart..blobend];
+        let blob = &src[blobstart..blobend];
 
         // for now skip stuff that's meant for testing. Often the test
         // module hierarchy is incompatible with the non-test
@@ -815,6 +802,26 @@ pub fn search_scope(start: Point, point: Point, src: Src,
         }
     }
 
+    v
+}
+
+pub fn search_scope(start: Point, point: Point, src: Src,
+                    pathseg: &core::PathSegment,
+                    filepath:&Path, search_type: SearchType, local: bool,
+                    namespace: Namespace,
+                    session: &Session,
+                    pending_imports: &PendingImports) -> vec::IntoIter<Match> {
+    let searchstr = &pathseg.name;
+    let mut out = Vec::new();
+
+    debug!("searching scope {:?} start: {} point: {} '{}' {:?} {:?} local: {}, session: {:?}",
+           namespace, start, point, searchstr, filepath.display(), search_type, local, session);
+
+    let scopesrc = src.from(start);
+    let mut delayed_single_imports = Vec::new();
+    let mut delayed_glob_imports = Vec::new();
+    let v = non_test_statements(&scopesrc, point);
+
     // search backwards from point for let bindings
     for &(blobstart, blobend) in v.iter().rev() {
         if (start+blobend) >= point {
@@ -824,7 +831,7 @@ pub fn search_scope(start: Point, point: Point, src: Src,
         for m in matchers::match_let(&src, start+blobstart,
                                      start+blobend,
                                      searchstr,
-                                     filepath, search_type, local).into_iter() {
+                                     filepath, search_type, local) {
             out.push(m);
             if let ExactMatch = search_type {
                 return out.into_iter();
@@ -833,7 +840,8 @@ pub fn search_scope(start: Point, point: Point, src: Src,
     }
 
     // since we didn't find a `let` binding, now search from top of scope for items etc..
-    let mut codeit = v.into_iter().chain(codeit);
+    let mut codeit = v.into_iter().chain(scopesrc.iter_stmts());
+    let mut skip_next_block = false;
     for (blobstart, blobend) in &mut codeit {
         // sometimes we need to skip blocks of code if the preceeding attribute disables it
         //  (e.g. #[cfg(test)])
@@ -865,10 +873,9 @@ pub fn search_scope(start: Point, point: Point, src: Src,
             // Optimisation: if the search string is not in the blob and it is not
             // a glob import, this cannot match so fail fast!
             let is_glob_import = blob.contains("::*");
-            if !is_glob_import {
-                if !blob.contains(searchstr.trim_right_matches('!')) {
-                    continue;
-                }
+
+            if !(is_glob_import || blob.contains(searchstr.trim_right_matches('!'))) {
+                continue;
             }
 
             if is_glob_import {
@@ -928,7 +935,7 @@ pub fn search_scope(start: Point, point: Point, src: Src,
         // There's a good chance of a match. Run the matchers
         for m in run_matchers_on_blob(src, start+blobstart, start+blobend,
                                       searchstr, filepath, search_type,
-                                      local, namespace, session, pending_imports).into_iter() {
+                                      local, namespace, session, pending_imports) {
             out.push(m);
             if let ExactMatch = search_type {
                 return out.into_iter();
@@ -1098,7 +1105,7 @@ pub fn search_prelude_file(pathseg: &core::PathSegment, search_type: SearchType,
 
     let v = srcpaths.split(PATH_SEP).collect::<Vec<_>>();
 
-    for srcpath in v.into_iter() {
+    for srcpath in v {
         let filepath = Path::new(srcpath).join("libstd").join("prelude").join("v1.rs");
         if filepath.exists() || session.contains_file(&filepath) {
             let msrc = session.load_file_and_mask_comments(&filepath);
@@ -1601,7 +1608,7 @@ fn search_for_deref_matches(impl_match: &Match, type_match: &Match, fieldsearchs
 
     if let Some(type_arg) = impl_match.generic_args.first() {
         // If Deref to a generic type
-        if let Some(inner_type_path) = generic_arg_to_path(&type_arg, type_match) {
+        if let Some(inner_type_path) = generic_arg_to_path(type_arg, type_match) {
             let type_match = resolve_path_with_str(&inner_type_path.path,
                                                    &inner_type_path.filepath,
                                                    0, SearchType::ExactMatch,

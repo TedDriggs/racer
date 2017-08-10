@@ -87,7 +87,7 @@ impl MethodInfo {
                      .iter()
                      .filter(|&s| !s.ends_with("self"))
                      .enumerate()
-                     .fold(String::new(), |cur, (i, ref s)| {
+                     .fold(String::new(), |cur, (i, s)| {
                          let arg = format!("${{{}:{}}}", i + 1, s);
                          let delim = if i > 0 { ", " } else { "" };
                          cur + delim + &arg

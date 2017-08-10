@@ -434,7 +434,7 @@ impl<'stack, T> StackLinkedListNode<'stack, T>
     /// Returns `true` if the item is found, or `false` if it's not found.
     pub fn contains(&self, item: &T) -> bool {
         let mut current = self;
-        while let &StackLinkedListNode(Some(StackLinkedListNodeData { item: ref current_item, previous })) = current {
+        while let StackLinkedListNode(Some(StackLinkedListNodeData { item: ref current_item, previous })) = *current {
             if current_item == item {
                 return true;
             }
@@ -483,8 +483,8 @@ fn test_trim_visibility() {
 /// Checks if the completion point is in a function declaration by looking
 /// to see if the second-to-last word is `fn`.
 pub fn in_fn_name(line_before_point: &str) -> bool {
-    /// Determine if the cursor is sitting in the whitespace after typing `fn ` before
-    /// typing a name.
+    // Determine if the cursor is sitting in the whitespace after typing `fn ` before
+    // typing a name.
     let has_started_name = !line_before_point.ends_with(|c: char| c.is_whitespace());
 
     let mut words = line_before_point.split_whitespace().rev();

@@ -28,12 +28,12 @@ pub fn generate_skeleton_for_parsing(src: &str) -> String {
 }
 
 pub fn first_param_is_self(blob: &str) -> bool {
-    /// Restricted visibility introduces the possibility of `pub(in ...)` at the start
-    /// of a method declaration. To counteract this, we restrict the search to only
-    /// look at text _after_ the visibility declaration.
-    ///
-    /// Having found the end of the visibility declaration, we now start the search
-    /// for method parameters.
+    // Restricted visibility introduces the possibility of `pub(in ...)` at the start
+    // of a method declaration. To counteract this, we restrict the search to only
+    // look at text _after_ the visibility declaration.
+    //
+    // Having found the end of the visibility declaration, we now start the search
+    // for method parameters.
     let blob = util::trim_visibility(blob);
 
     // skip generic arg
@@ -43,7 +43,6 @@ pub fn first_param_is_self(blob: &str) -> bool {
         None => false,
         Some(probable_param_start) => {
             let skip_generic = match blob.find('<') {
-                None => 0,
                 Some(generic_start) if generic_start < probable_param_start => {
                     let mut level = 0;
                     let mut prev = ' ';
@@ -63,9 +62,10 @@ pub fn first_param_is_self(blob: &str) -> bool {
                     }
                     skip_generic
                 },
-                Some(..) => 0,
+                Some(..) | None => 0,
             };
-            while let Some(start) = blob[skip_generic..].find('(') {
+            
+            if let Some(start) = blob[skip_generic..].find('(') {
                 let end = scopes::find_closing_paren(blob, start + 1);
                 let is_self = txt_matches(ExactMatch, "self", &blob[(start + 1)..end]);
                 trace!("searching fn args for self: |{}| {}",
@@ -217,7 +217,7 @@ fn get_type_of_for_expr(m: &Match, msrc: Src, session: &Session) -> Option<core:
 }
 
 pub fn get_struct_field_type(fieldname: &str, structmatch: &Match, session: &Session) -> Option<core::Ty> {
-    assert!(structmatch.mtype == core::MatchType::Struct);
+    assert_eq!(structmatch.mtype, core::MatchType::Struct);
 
     let src = session.load_file(&structmatch.filepath);
 
@@ -225,7 +225,7 @@ pub fn get_struct_field_type(fieldname: &str, structmatch: &Match, session: &Ses
     let structsrc = scopes::end_of_next_scope(&src[opoint..]);
 
     let fields = ast::parse_struct_fields(structsrc.to_owned(), Scope::from_match(structmatch));
-    for (field, _, ty) in fields.into_iter() {
+    for (field, _, ty) in fields {
         if fieldname == field {
             return ty;
         }
@@ -243,7 +243,7 @@ pub fn get_tuplestruct_field_type(fieldnum: usize, structmatch: &Match, session:
             .expect("Tuple enum variant should have `(` in definition");
         "struct ".to_owned() + &src[structmatch.point..(to+1)] + ";"
     } else {
-        assert!(structmatch.mtype == core::MatchType::Struct);
+        assert_eq!(structmatch.mtype, core::MatchType::Struct);
         let opoint = scopes::expect_stmt_start(src.as_src(), structmatch.point);
         (*get_first_stmt(src.as_src().from(opoint))).to_owned()
     };
@@ -350,7 +350,7 @@ pub fn get_return_type_of_function(fnmatch: &Match, contextm: &Match, session: &
 
     // Convert output arg of type Self to the correct type
     if let Some(core::Ty::PathSearch(ref path, _)) = out {
-        if let Some(ref path_seg) = path.segments.get(0) {
+        if let Some(path_seg) = path.segments.get(0) {
             if "Self" == path_seg.name {
                 return get_type_of_self_arg(fnmatch, src.as_src(), session);
             }
@@ -359,7 +359,7 @@ pub fn get_return_type_of_function(fnmatch: &Match, contextm: &Match, session: &
 
     // Convert a generic output arg to the correct type
     if let Some(core::Ty::PathSearch(ref path, _)) = out {
-        if let Some(ref path_seg) = path.segments.get(0) {
+        if let Some(path_seg) = path.segments.get(0) {
             if path.segments.len() == 1 && path_seg.types.is_empty() {
                 for type_name in &fnmatch.generic_args {
                     if type_name == &path_seg.name {

@@ -48,8 +48,8 @@ pub fn string_to_stmt(source_str: String) -> Option<ast::Stmt> {
 }
 
 // parse a string, return a crate.
-pub fn string_to_crate(source_str: String) -> Option<ast::Crate> {
-    with_error_checking_parse(source_str.clone(), |p| {
+pub fn string_to_crate(source_str: &str) -> Option<ast::Crate> {
+    with_error_checking_parse(source_str.into(), |p| {
         use std::result::Result::{Ok, Err};
         match p.parse_crate_mod() {
             Ok(e) => Some(e),
@@ -114,9 +114,9 @@ impl visit::Visitor for UseVisitor {
                 ast::ViewPathList(ref pth, ref paths) => {
                     let basepath = to_racer_path(pth);
                     for path in paths {
-                        /// Figure out the identifier being introduced to the local
-                        /// namespace. This will differ from the import name if an `as`
-                        /// was used.
+                        // Figure out the identifier being introduced to the local
+                        // namespace. This will differ from the import name if an `as`
+                        // was used.
                         let ident = path.node.rename.unwrap_or(path.node.name).name.to_string();
 
                         let name = path.node.name.name.to_string();
@@ -448,7 +448,7 @@ fn find_type_match(path: &core::Path, fpath: &Path, pos: Point, session: &Sessio
     let res = resolve_path_with_str(path, fpath, pos, core::SearchType::ExactMatch,
                core::Namespace::Type, session).nth(0).and_then(|m| {
                    match m.mtype {
-                       MatchType::Type => get_type_of_typedef(m, session, fpath),
+                       MatchType::Type => get_type_of_typedef(&m, session, fpath),
                        _ => Some(m)
                    }
                });
@@ -472,7 +472,7 @@ fn find_type_match(path: &core::Path, fpath: &Path, pos: Point, session: &Sessio
     })
 }
 
-fn get_type_of_typedef(m: Match, session: &Session, fpath: &Path) -> Option<Match> {
+fn get_type_of_typedef(m: &Match, session: &Session, fpath: &Path) -> Option<Match> {
     debug!("get_type_of_typedef match is {:?}", m);
     let msrc = session.load_file_and_mask_comments(&m.filepath);
     let blobstart = m.point - 5;  // - 5 because 'type '
@@ -654,7 +654,7 @@ impl<'c, 's> visit::Visitor for ExprTypeVisitor<'c, 's> {
                 self.result = self.result.as_ref().and_then(|ty| {
                     match *ty {
                         Ty::Match(ref structm) => {
-                            typeinf::get_tuplestruct_field_type(fieldnum, structm, &self.session)
+                            typeinf::get_tuplestruct_field_type(fieldnum, structm, self.session)
                                 .and_then(|fieldtypepath|
                                     find_type_match_including_generics(&fieldtypepath, 
                                                                        &structm.filepath, 
@@ -669,7 +669,7 @@ impl<'c, 's> visit::Visitor for ExprTypeVisitor<'c, 's> {
 
             ExprKind::Try(ref expr) => {                
                 debug!("try expr");
-                self.visit_expr(&expr);
+                self.visit_expr(expr);
                 self.result = if let Some(&Ty::Match(ref m)) = self.result.as_ref() {
                     // HACK: Try to break open the result and find it's "Ok" type.
                     // Once the 'Try' operator trait stabilizes, it'd be better to
@@ -984,7 +984,7 @@ impl visit::Visitor for EnumVisitor {
     }
 }
 
-pub fn parse_use(s: String) -> UseVisitor {
+pub fn parse_use(s: &str) -> UseVisitor {
     let mut v = UseVisitor{ ident: None, paths: Vec::new(), is_glob: false };
     if let Some(cr) = string_to_crate(s) {
         visit::walk_crate(&mut v, &cr);

@@ -513,6 +513,9 @@ impl<'c> Src<'c> {
         StmtIndicesIter::from_parts(self, self.chunk_indices())
     }
 
+    /// Get range of source code after `from` point.
+    // Clippy doesn't like that this method is named `from`, but it makes sense here
+    #[cfg_attr(feature = "cargo-clippy", allow(wrong_self_convention))]
     pub fn from(&self, from: Point) -> Src<'c> {
         Src {
             src: self.src,
@@ -529,6 +532,9 @@ impl<'c> Src<'c> {
         }
     }
 
+    /// Get range of source code between `from` and `to` points.
+    // Clippy doesn't like that this method is named `from_*`, but it makes sense here
+    #[cfg_attr(feature = "cargo-clippy", allow(wrong_self_convention))]
     pub fn from_to(&self, from: Point, to: Point) -> Src<'c> {
         Src {
             src: self.src,
@@ -609,7 +615,7 @@ pub struct FileCache {
     loader: Box<FileLoader>,
 }
 
-/// Used by the FileCache for loading files
+/// Used by the `FileCache` for loading files
 ///
 /// Implement one of these and pass it to `FileCache::new()` to override Racer's
 /// file loading behavior.
@@ -621,7 +627,7 @@ pub trait FileLoader {
 /// Provide a blanket impl for Arc<T> since Rls uses that
 impl<T: FileLoader> FileLoader for ::std::sync::Arc<T> {
     fn load_file(&self, path: &path::Path) -> io::Result<String> {
-        (&self as &T).load_file(path)
+        (self as &T).load_file(path)
     }
 }
 
@@ -809,10 +815,10 @@ impl<'c> SessionExt for Session<'c> {
 }
 
 /// Get the racer point of a line/character number pair for a file.
-pub fn to_point<'c, P>(
+pub fn to_point<P>(
     coords: Coordinate, 
     path: P, 
-    session: &'c Session
+    session: &Session
 ) -> Option<Point> 
     where 
         P: AsRef<path::Path> {
@@ -820,10 +826,10 @@ pub fn to_point<'c, P>(
 }
 
 /// Get the racer point of a line/character number pair for a file.
-pub fn to_coords<'c, P>(
+pub fn to_coords<P>(
     point: Point, 
     path: P, 
-    session: &'c Session
+    session: &Session
 ) -> Option<Coordinate> 
     where 
         P: AsRef<path::Path> {
@@ -836,7 +842,7 @@ pub fn to_coords<'c, P>(
 ///
 /// * `query` - is the fqn to search for
 /// * `path` - the directory to start searching in
-/// * `session` - reference to a racer::Session
+/// * `session` - reference to a `racer::Session`
 ///
 /// ```no_run
 /// extern crate racer;
@@ -892,7 +898,7 @@ fn complete_fully_qualified_name_(
                 m.point,
                 SearchType::StartsWith,
                 Namespace::Both,
-                &session
+                session
             );
 
             for m in external_search_matches {
@@ -910,7 +916,7 @@ fn complete_fully_qualified_name_(
 /// * `src` - the file contents to search in
 /// * `filepath` - path to file containing `src`
 /// * `pos` - byte offset in file with path/expr to complete
-/// * `session` - a racer::Session
+/// * `session` - a `racer::Session`
 ///
 /// # Examples
 ///
@@ -997,9 +1003,9 @@ fn complete_from_file_(
             let line = src_text[linestart..pos].trim().rsplit(';').nth(0).unwrap();
             debug!("Complete path with line: {:?}", line);
 
-            /// Test if the **path expression** starts with `::`, in which case the path
-            /// should be checked against the global namespace rather than the items currently
-            /// in scope.
+            // Test if the **path expression** starts with `::`, in which case the path
+            // should be checked against the global namespace rather than the items currently
+            // in scope.
             let is_global = expr.starts_with("::");
             let is_use = line.starts_with("use ");
 

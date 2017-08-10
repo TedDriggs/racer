@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::io::{self, BufRead, Read};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-fn point(cfg: Config) {
+fn point(cfg: &Config) {
     let cache = FileCache::default();
     let session = Session::new(&cache);
     cfg.interface.emit(Message::Coords(cfg.coords()));
@@ -21,7 +21,7 @@ fn point(cfg: Config) {
     cfg.interface.emit(Message::End);
 }
 
-fn coord(cfg: Config) {
+fn coord(cfg: &Config) {
     let cache = FileCache::default();
     let session = Session::new(&cache);
     cfg.interface.emit(Message::Point(cfg.point));
@@ -53,7 +53,7 @@ fn match_fn(m: Match, interface: Interface) {
 
 fn complete(cfg: Config, print_type: CompletePrinter) {
     if cfg.fqn.is_some() {
-        return external_complete(cfg, print_type);
+        return external_complete(&cfg, print_type);
     }
     complete_by_line_coords(cfg, print_type);
 }
@@ -77,7 +77,7 @@ fn complete_by_line_coords(cfg: Config,
     interface.emit(Message::End);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum CompletePrinter {
     Normal,
     WithSnippets
@@ -140,7 +140,7 @@ fn run_the_complete_fn(cfg: &Config, print_type: CompletePrinter) {
 }
 
 /// Completes a fully qualified name specified on command line
-fn external_complete(cfg: Config, print_type: CompletePrinter) {
+fn external_complete(cfg: &Config, print_type: CompletePrinter) {
     let cwd = Path::new(".");
     let cache = FileCache::default();
     let session = Session::new(&cache);
@@ -153,7 +153,7 @@ fn external_complete(cfg: Config, print_type: CompletePrinter) {
     }
 }
 
-fn prefix(cfg: Config) {
+fn prefix(cfg: &Config) {
     let fn_path = cfg.fn_name.as_ref().unwrap();
     let substitute_file = cfg.substitute_file.as_ref().unwrap_or(fn_path);
     let cache = FileCache::default();
@@ -167,7 +167,7 @@ fn prefix(cfg: Config) {
     cfg.interface.emit(Message::Prefix(expanded.start(), expanded.pos(), expanded.ident()));
 }
 
-fn find_definition(cfg: Config) {
+fn find_definition(cfg: &Config) {
     let fn_path = cfg.fn_name.as_ref().unwrap();
     let substitute_file = cfg.substitute_file.as_ref().unwrap_or(fn_path);
     let cache = FileCache::default();
@@ -192,7 +192,7 @@ fn validate_rust_src_path_env_var() {
 
 }
 
-fn daemon(cfg: Config) {
+fn daemon(cfg: &Config) {
     let mut input = String::new();
     while let Ok(n) = io::stdin().read_line(&mut input) {
         // '\n' == 1
@@ -206,7 +206,7 @@ fn daemon(cfg: Config) {
             Interface::Text => cli.get_matches_from(input.trim_right().split_whitespace()),
             Interface::TabText => cli.get_matches_from(input.trim_right().split('\t'))
         };
-        run(matches, cfg.interface);
+        run(&matches, cfg.interface);
 
         input.clear();
     }
@@ -474,23 +474,24 @@ fn main() {
     
     validate_rust_src_path_env_var();
     
-    run(matches, interface);
+    run(&matches, interface);
 }
 
-fn run(m: ArgMatches, interface: Interface) {
+fn run(m: &ArgMatches, interface: Interface) {
     use CompletePrinter::{Normal, WithSnippets};
     // match raw subcommand, and get it's sub-matches "m"
     if let (name, Some(sub_m)) = m.subcommand() {
         let mut cfg = Config::from(sub_m);
         cfg.interface = interface;
+        
         match name {
-            "daemon"                => daemon(cfg),
-            "prefix"                => prefix(cfg),
+            "daemon"                => daemon(&cfg),
+            "prefix"                => prefix(&cfg),
             "complete"              => complete(cfg, Normal),
             "complete-with-snippet" => complete(cfg, WithSnippets),
-            "find-definition"       => find_definition(cfg),
-            "point"                 => point(cfg),
-            "coord"                => coord(cfg),
+            "find-definition"       => find_definition(&cfg),
+            "point"                 => point(&cfg),
+            "coord"                => coord(&cfg),
             _                       => unreachable!()
         }
     }

@@ -35,7 +35,7 @@ fn within_test_project<F, T>(func: F) -> T
     test_project_path.push("test_project");
 
     env::set_current_dir(&test_project_path).unwrap();
-    let res = panic::catch_unwind(AssertUnwindSafe(|| func()));
+    let res = panic::catch_unwind(AssertUnwindSafe(func));
     env::set_current_dir(&start).unwrap();
 
     match res {
@@ -47,7 +47,7 @@ fn within_test_project<F, T>(func: F) -> T
 /// A temporary file that is removed on drop
 ///
 /// With the new constructor, you provide contents and a file is created based on the name of the
-/// current task. The with_name constructor allows you to choose a name. Neither forms are secure,
+/// current task. The `with_name` constructor allows you to choose a name. Neither forms are secure,
 /// and both are subject to race conditions.
 pub struct TmpFile {
     path_buf: PathBuf
@@ -114,6 +114,7 @@ pub struct TmpDir {
 }
 
 impl TmpDir {
+    #[cfg_attr(feature = "cargo-clippy", allow(new_without_default_derive))]
     pub fn new() -> TmpDir {
         TmpDir::with_path(tmpname())
     }
@@ -158,7 +159,7 @@ fn get_pos_and_source(src: &str) -> (Point, String) {
 ///
 /// The point to find completions at must be marked with '~'.
 fn get_all_completions(src: &str, dir: Option<TmpDir>) -> Vec<Match> {
-    let dir = dir.unwrap_or_else(|| TmpDir::new());
+    let dir = dir.unwrap_or_else(TmpDir::new);
     let (completion_point, clean_src) = get_pos_and_source(src);
     let path = dir.write_file("src.rs", &clean_src);
     let cache = racer::FileCache::default();
@@ -187,7 +188,7 @@ fn get_only_completion(src: &str, dir: Option<TmpDir>) -> Match {
 ///
 /// The point to find the definition at must be marked with '~'.
 fn get_definition(src: &str, dir: Option<TmpDir>) -> Match {
-    let dir = dir.unwrap_or_else(|| TmpDir::new());
+    let dir = dir.unwrap_or_else(TmpDir::new);
     let (completion_point, clean_src) = get_pos_and_source(src);
     let path = dir.write_file("src.rs", &clean_src);
     let cache = racer::FileCache::default();

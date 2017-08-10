@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+
 use {scopes, typeinf, ast};
 use core::{Match, PathSegment, Src, Session, Coordinate, SessionExt, Point};
 use util::{StackLinkedListNode, symbol_matches, txt_matches, find_ident_end, is_ident_char, char_at};
@@ -24,6 +26,7 @@ pub type MIter = option::IntoIter<Match>;
 pub type MChain<T> = iter::Chain<T, MIter>;
 
 // TODO change return type to `impl Iterator<Item = Match>`
+#[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
 pub fn match_types(src: Src, blobstart: Point, blobend: Point,
                    searchstr: &str, filepath: &Path,
                    search_type: SearchType,
@@ -57,10 +60,10 @@ fn find_keyword(src: &str, pattern: &str, search: &str, search_type: SearchType,
     let mut start = 0usize;
 
     // optional (pub\s+)?(unsafe\s+)?
-    for pat in ["pub", "unsafe"].into_iter() {
+    for pat in &["pub", "unsafe"] {
         if src[start..].starts_with(pat) {
-            /// Rust added support for `pub(in codegen)`; we need to consume the visibility 
-            /// specifier for the rest of the code to keep working.
+            // Rust added support for `pub(in codegen)`; we need to consume the visibility 
+            // specifier for the rest of the code to keep working.
             let allow_scope = pat == &"pub";
             let mut levels = 0;
 
@@ -247,6 +250,7 @@ pub fn match_for(msrc: &str, blobstart: Point, blobend: Point,
     out
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(or_fun_call))]
 pub fn first_line(blob: &str) -> String {
     blob[..blob.find('\n').unwrap_or(blob.len())].to_owned()
 }
@@ -256,7 +260,7 @@ pub fn first_line(blob: &str) -> String {
 /// Strip all whitespace, including newlines in order to have a single line
 /// context string.
 pub fn get_context(blob: &str, context_end: &str) -> String {
-    blob[..blob.find(context_end).unwrap_or(blob.len())]
+    blob[..blob.find(context_end).unwrap_or_else(|| blob.len())]
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -398,7 +402,7 @@ pub fn match_struct(msrc: &str, blobstart: Point, blobend: Point,
         debug!("found a struct |{}|", l);
 
         // Parse generics
-        let end = match blob.find('{').or(blob.find(';')) {
+        let end = match blob.find('{').or_else(|| blob.find(';')) {
             Some(e) => e,
             None => {
                 error!("Can't find end of struct header");
@@ -490,7 +494,7 @@ pub fn match_enum_variants(msrc: &str, blobstart: Point, blobend: Point,
         // parse the enum
         let parsed_enum = ast::parse_enum(blob.to_owned());
 
-        for (name, offset) in parsed_enum.values.into_iter() {
+        for (name, offset) in parsed_enum.values {
             if name.starts_with(searchstr) {
                 let m = Match {
                     matchstr: name,
@@ -522,7 +526,7 @@ pub fn match_enum(msrc: &str, blobstart: Point, blobend: Point,
         };
         debug!("found!! an enum |{}|", l);
         // Parse generics
-        let end = blob.find('{').or(blob.find(';'))
+        let end = blob.find('{').or_else(|| blob.find(';'))
             .expect("Can't find end of enum header");
         let generics = ast::parse_generics(format!("{}{{}}", &blob[..end]));
 
@@ -548,7 +552,7 @@ pub fn match_use(msrc: &str, blobstart: Point, blobend: Point,
                  local: bool, session: &Session,
                  pending_imports: &PendingImports) -> Vec<Match> {
     let import = PendingImport {
-        filepath: &filepath,
+        filepath: filepath,
         blobstart: blobstart,
         blobend: blobend,
     };
@@ -571,7 +575,7 @@ pub fn match_use(msrc: &str, blobstart: Point, blobend: Point,
 
     if blob.contains('*') {
         // uh oh! a glob. Need to search the module for the searchstr
-        let use_item = ast::parse_use(blob.to_owned());
+        let use_item = ast::parse_use(blob);
         debug!("found a glob!! {:?}", use_item);
 
         if use_item.is_glob {
@@ -591,10 +595,10 @@ pub fn match_use(msrc: &str, blobstart: Point, blobend: Point,
         }
     } else if txt_matches(search_type, searchstr, blob) {
         debug!("found use: {} in |{}|", searchstr, blob);
-        let use_item = ast::parse_use(blob.to_owned());
+        let use_item = ast::parse_use(blob);
 
-        let ident = use_item.ident.unwrap_or("".into());
-        for path in use_item.paths.into_iter() {
+        let ident = use_item.ident.unwrap_or_else(|| "".into());
+        for path in use_item.paths {
             let len = path.path.segments.len();
             if symbol_matches(search_type, searchstr, &path.ident) { // i.e. 'use foo::bar as searchstr'
                 if len == 1 && path.path.segments[0].name == searchstr {
@@ -638,17 +642,16 @@ pub fn match_use(msrc: &str, blobstart: Point, blobend: Point,
                         path
                     };
 
-                    if path.path.segments.len() > 1 {
-                        if symbol_matches(search_type, searchstr, &path.path.segments.last().unwrap().name) {
-                            // last path segment matches the path. find it!
-                            for m in resolve_path(path.as_ref(), filepath, blobstart,
-                                                  ExactMatch, Namespace::Both, session, pending_imports) {
-                                out.push(m);
-                                if let ExactMatch = search_type  {
-                                    return out;
-                                } else {
-                                    break;
-                                }
+                    if path.path.segments.len() > 1 
+                       && symbol_matches(search_type, searchstr, &path.path.segments.last().unwrap().name) {
+                        // last path segment matches the path. find it!
+                        for m in resolve_path(path.as_ref(), filepath, blobstart,
+                                                ExactMatch, Namespace::Both, session, pending_imports) {
+                            out.push(m);
+                            if let ExactMatch = search_type  {
+                                return out;
+                            } else {
+                                break;
                             }
                         }
                     }

@@ -46,14 +46,14 @@ fn get_branch_from_source(source: &str) -> Option<&str> {
     }
 }
 
-/// Gets the repository_name from a git source string if one is present.
+/// Gets the `repository_name` from a git source string if one is present.
 fn get_repository_name_from_source(source: &str) -> Option<&str> {
     debug!("get_repository_name_from_source - Finding repository name from {:?}", source);
-    match source.rfind("/") {
+    match source.rfind('/') {
         Some(idx) => {
             let (_, mut repository_name) = source.split_at(idx + 1);
-            let mut idx =  repository_name.find("?").unwrap_or_else(|| {
-                repository_name.find("#").unwrap_or(0)
+            let mut idx =  repository_name.find('?').unwrap_or_else(|| {
+                repository_name.find('#').unwrap_or(0)
             });
             if idx == 0 {
                 return None;
@@ -180,9 +180,9 @@ fn get_cargo_packages(cargofile: &Path) -> Option<Vec<PackageInfo>> {
                         //use repository name instead of package name                        
                         let repository_name = get_repository_name_from_source(&package_source);
                         if repository_name.is_some() {
-                            d = unwrap_or_continue!(find_git_src_dir(d, repository_name.unwrap(), &sha1, branch));
+                            d = unwrap_or_continue!(find_git_src_dir(d, repository_name.unwrap(), sha1, branch));
                         } else {
-                            d = unwrap_or_continue!(find_git_src_dir(d, package_name, &sha1, branch));
+                            d = unwrap_or_continue!(find_git_src_dir(d, package_name, sha1, branch));
                         }
 
                         d.push("src");
@@ -290,7 +290,7 @@ fn get_versioned_cratefile(kratename: &str, version: &str, cargofile: &Path) -> 
         // First, check for package name at root (src/kratename/lib.rs)
         d.push(kratename);
         d.push("lib.rs");
-        if let Err(_) = File::open(&d) {
+        if File::open(&d).is_err() {
             // It doesn't exist, so assume src/lib.rs
             d.pop();
             d.pop();
@@ -298,7 +298,7 @@ fn get_versioned_cratefile(kratename: &str, version: &str, cargofile: &Path) -> 
         }
         debug!("crate path with lib.rs {:?}",d);
 
-        if let Err(_) = File::open(&d) {
+        if File::open(&d).is_err() {
             trace!("failed to open crate path {:?}", d);
             // It doesn't exist, so try /lib.rs
             d.pop();
@@ -306,7 +306,7 @@ fn get_versioned_cratefile(kratename: &str, version: &str, cargofile: &Path) -> 
             d.push("lib.rs");
         }
 
-        if let Err(_) = File::open(&d) {
+        if File::open(&d).is_err() {
             trace!("failed to open crate path {:?}", d);
             continue;
         }
@@ -316,7 +316,7 @@ fn get_versioned_cratefile(kratename: &str, version: &str, cargofile: &Path) -> 
     None
  }
 
-/// Return path to library source if the Cargo.toml name matches crate_name
+/// Return path to library source if the Cargo.toml name matches `crate_name`
 fn path_if_desired_lib(crate_name: &str, path: &Path, cargo_toml: &toml::Table) -> Option<PathBuf> {
     let parent = otry!(path.parent());
 
@@ -564,7 +564,7 @@ fn get_override_paths(path: &Path) -> Vec<String> {
         .collect()
 }
 
-/// An iterator yielding PathBuf for cargo override files
+/// An iterator yielding `PathBuf` for cargo override files
 ///
 /// The iterator starts in the provided path and works its way up to the root
 /// directory.
@@ -615,7 +615,7 @@ fn get_crate_file_from_overrides<P>(crate_name: &str, path: P) -> Option<PathBuf
     // For each .cargo/config file
     for cargo_config in CargoOverrides(path) {
         // For each path in .cargo/config `paths`
-        for override_path in get_override_paths(cargo_config.as_path()).into_iter() {
+        for override_path in get_override_paths(cargo_config.as_path()) {
             trace!("examining override_path={:?}", override_path);
             let mut path = PathBuf::from(override_path);
 

@@ -214,6 +214,7 @@ pub fn get_line(src: &str, point: Point) -> Point {
 
 /// search in reverse for the start of the current expression 
 /// allow . and :: to be surrounded by white chars to enable multi line call chains 
+#[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
 pub fn get_start_of_search_expr(src: &str, point: Point) -> Point {
 
     enum State {
@@ -229,6 +230,8 @@ pub fn get_start_of_search_expr(src: &str, point: Point) -> Point {
     }
     let mut ws_ok = State::None;
     for (i, c) in src.as_bytes()[..point].iter().enumerate().rev() {
+        // Order of match arms matters here, so clippy's complaint about same arms 
+        // is a false positive.
         ws_ok = match (*c,ws_ok) {
             (b'(', State::None) => State::Result(i+1),
             (b'(', State::Levels(1)) =>  State::None,
